@@ -283,7 +283,7 @@ public class DoorLockClient {
                 // 请求高优先级连接：更短连接间隔，加快 GATT 往返、减少超时断连
                 try { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH); }
                 catch (Throwable ignored) { }
-                g.discoverServices();
+                try { g.discoverServices(); } catch (Throwable ignored) { }
                 // 读取信号强度（供状态看板）
                 try { g.readRemoteRssi(); } catch (Throwable ignored) { }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
@@ -433,7 +433,9 @@ public class DoorLockClient {
     @SuppressLint("MissingPermission")
     private void enableNotification() {
         if (notifyChar == null) { error("通知特征为空"); endTask(); return; }
-        boolean ok = gatt.setCharacteristicNotification(notifyChar, true);
+        boolean ok;
+        try { ok = gatt.setCharacteristicNotification(notifyChar, true); }
+        catch (Throwable t) { ok = false; }
         if (!ok) { error("开启通知失败"); endTask(); return; }
         BluetoothGattDescriptor desc = notifyChar.getDescriptor(CCCD_UUID);
         if (desc == null) {
@@ -447,7 +449,8 @@ public class DoorLockClient {
             } else {
                 desc.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
             }
-            gatt.writeDescriptor(desc);
+            try { gatt.writeDescriptor(desc); }
+            catch (Throwable t) { error("通知描述符写入失败"); endTask(); return; }
         } else {
             requestMtuThenStart();
         }
@@ -545,7 +548,10 @@ public class DoorLockClient {
         if (cancelled) return;
         try { writeChar.setWriteType(writeType()); } catch (Throwable ignored) { }
         writeChar.setValue(currentPacket);
-        if (gatt.writeCharacteristic(writeChar)) {
+        boolean ok;
+        try { ok = gatt.writeCharacteristic(writeChar); }
+        catch (Throwable t) { ok = false; }
+        if (ok) {
             if (writeTimeout != null) mainHandler.removeCallbacks(writeTimeout);
             writeTimeout = () -> { if (!writeAcked) onWriteComplete(true); };
             mainHandler.postDelayed(writeTimeout, 2000);

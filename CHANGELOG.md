@@ -17,6 +17,11 @@
   `ACTION_VIEW`，零第三方依赖）。
 - **版本**：v1.0.1 → **v1.1.0**（versionCode 4 → 5）；页脚移除
   「协议复刻自 lmc2007/TMallKey」行（README/LICENSE 保留致谢，MIT 合规）。
+- **闪退加固**：minSdk 21 → **23**（对齐 README「Android 6.0+」，消除 API 21-22
+  `checkSelfPermission` NoSuchMethodError）；`java.util.function.Consumer`（API 24+）
+  换成自定义 `PassCallback`；更新检查/安装回调加 `isFinishing/isDestroyed` 守卫
+  （防 `BadTokenException`）；全部 GATT 调用包 `try-catch`（防蓝牙权限拒绝
+  `SecurityException`）；新增 `CrashLogger`（未捕获异常写 `crash.log`，无 logcat 可定位）。
 
 ## 1.0.1 (2026-11-03)
 

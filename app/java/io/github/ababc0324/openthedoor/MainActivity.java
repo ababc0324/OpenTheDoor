@@ -56,6 +56,9 @@ public class MainActivity extends Activity {
     private static final int REQ_EXPORT = 2001;
     private static final int REQ_IMPORT = 2002;
 
+    /** 备份口令回调（替代 java.util.function.Consumer —— 后者 API 24 才有，minSdk 23 下不可用）。 */
+    private interface PassCallback { void accept(String pass); }
+
     private static final int LOW_BATTERY = 20;
 
     // ---------------- 深色配色 ----------------
@@ -111,6 +114,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        CrashLogger.install(this);          // 先装崩溃日志器（无 logcat 也可定位闪退）
         Window w = getWindow();
         w.setStatusBarColor(C_WIN_BG);
         w.setNavigationBarColor(C_WIN_BG);
@@ -718,7 +722,7 @@ public class MainActivity extends Activity {
     private void silentUpdateCheck() {
         UpdateManager.checkAsync(this, new UpdateManager.Callback() {
             @Override public void onResult(boolean has, String v, String cl, String url, String sha) {
-                if (has) runOnUiThread(() -> showUpdateDialog(v, cl, url, sha));
+                if (has) runOnUiThread(() -> { if (alive()) showUpdateDialog(v, cl, url, sha); });
             }
             @Override public void onError(String m) { /* 静默失败不打扰 */ }
         });
@@ -730,18 +734,20 @@ public class MainActivity extends Activity {
         UpdateManager.checkAsync(this, new UpdateManager.Callback() {
             @Override public void onResult(boolean has, String v, String cl, String url, String sha) {
                 runOnUiThread(() -> {
+                    if (!alive()) return;
                     heroHint("已是最新版本");
                     if (has) showUpdateDialog(v, cl, url, sha);
                     else toast("已是最新版本 v" + UpdateManager.currentVersion(MainActivity.this));
                 });
             }
             @Override public void onError(String m) {
-                runOnUiThread(() -> { toast("检查更新失败：" + m); heroHint("检查更新失败"); });
+                runOnUiThread(() -> { if (alive()) { toast("检查更新失败：" + m); heroHint("检查更新失败"); } });
             }
         });
     }
 
     private void showUpdateDialog(String version, String changelog, String url, String sha) {
+        if (!alive()) return;   // 更新检查回调时 Activity 可能已销毁（防 BadTokenException）
         String body = "发现新版本 v" + version + "\n\n" + (changelog == null ? "" : changelog) + "\n\n下载后同签名覆盖安装。";
         new AlertDialog.Builder(this)
                 .setTitle("发现新版本")
@@ -758,6 +764,7 @@ public class MainActivity extends Activity {
                 FileHolder f = new FileHolder();
                 f.file = UpdateManager.download(this, url, sha);
                 runOnUiThread(() -> {
+                    if (!alive()) return;
                     try {
                         UpdateManager.install(this, f.file);
                         toast("已开始安装更新");
@@ -768,7 +775,7 @@ public class MainActivity extends Activity {
                     }
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> { toast("下载更新失败：" + e.getMessage()); heroHint("更新失败"); });
+                runOnUiThread(() -> { if (alive()) { toast("下载更新失败：" + e.getMessage()); heroHint("更新失败"); } });
             }
         }).start();
     }
@@ -836,7 +843,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void promptPassphrase(boolean confirm, final java.util.function.Consumer<String> cb) {
+    private void promptPassphrase(boolean confirm, final PassCallback cb) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(20), dp(8), dp(20), 0);
@@ -1226,7 +1233,14 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    /** Activity 仍可弹窗/开新页（未 finishing 且未 destroyed）。 */
+    private boolean alive() {
+        return !isFinishing() && !isDestroyed();
+    }
+
     private void toast(String msg) {
-        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+        try {
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+        } catch (Throwable ignored) { }
     }
 }
