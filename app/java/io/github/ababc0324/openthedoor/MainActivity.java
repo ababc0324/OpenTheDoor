@@ -175,12 +175,8 @@ public class MainActivity extends Activity {
                 client.preconnect(mac);
             }
         }
-        // 静默检查更新（>24h 一次）
-        long last = meta.getLong("last_update_check", 0);
-        if (System.currentTimeMillis() - last > 24L * 3600_000) {
-            meta.edit().putLong("last_update_check", System.currentTimeMillis()).apply();
-            silentUpdateCheck();
-        }
+        // 静默检查更新（>24h 一次；开锁成功后也会触发，共享同一冷却）
+        maybeCheckForUpdate();
     }
 
     @Override
@@ -726,6 +722,14 @@ public class MainActivity extends Activity {
 
     // ==================== 自更新 ====================
 
+    /** 静默检查更新，24h 冷却；onStart 与开锁成功后共用，避免频繁弹窗/请求。 */
+    private void maybeCheckForUpdate() {
+        long last = meta.getLong("last_update_check", 0);
+        if (System.currentTimeMillis() - last <= 24L * 3600_000) return;
+        meta.edit().putLong("last_update_check", System.currentTimeMillis()).apply();
+        silentUpdateCheck();
+    }
+
     private void silentUpdateCheck() {
         UpdateManager.checkAsync(this, new UpdateManager.Callback() {
             @Override public void onResult(boolean has, String v, String cl, String url, String sha) {
@@ -923,6 +927,7 @@ public class MainActivity extends Activity {
                 history.add(doorName(), mac);
                 running = false;
                 refreshDashboard();
+                maybeCheckForUpdate();   // 开锁成功后静默检查更新（共享 24h 冷却，不打断开锁）
             }
             @Override public void onError(String m) {
                 log("错误: " + m);

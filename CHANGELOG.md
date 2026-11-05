@@ -28,4 +28,4 @@
 
 - **minSdk 21 → 23**（对齐 README「Android 6.0+」）：避免 API 21-22 `checkSelfPermission` `NoSuchMethodError`。
 - **移除 `java.util.function.Consumer`**（API 24+）→ 自定义 `PassCallback`；全部 GATT 调用包 `try-catch`；`isFinishing/isDestroyed` 守卫防 `BadTokenException`；权限拒绝兜底。
-- **版本**：v1.0.1 → **v1.1.0**（versionCode 4 → 5）；页脚移除「协议复刻自 lmc2007/TMallKey」行，README/LICENSE 保留署名与致谢（MIT 合规）。
+- **版本**：v1.0.1 → **v1.1.0**（versionCode 4 → 5）；README/LICENSE 保留署名与致谢（MIT 合规）。
