@@ -58,6 +58,8 @@ public class DoorLockClient {
     private static final int COLD_START_HOLD_MS = 30_000;
     /** 开锁后保活时长；期间再开锁重新计时。 */
     private static final int DEFAULT_IDLE_CLOSE_MS = 60_000;
+    /** 单条命令总超时（0D→13→命令 往返）；超时释放连接，防电量卡死影响开门。 */
+    private static final int COMMAND_TIMEOUT_MS = 8_000;
 
     private final Context context;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -98,6 +100,8 @@ public class DoorLockClient {
     private volatile boolean foreground = false;
     private volatile boolean batteryQuery = false;        // 当前任务是电量查询（否则开锁）
     private volatile int lastRssi = Integer.MIN_VALUE;     // 最近信号强度 dBm（MIN_VALUE=未知）
+    private Runnable commandTimeout = null;                // 当前命令超时（防卡死）
+    private long taskSeq = 0;                              // 命令序号（防过期回调/超时）
 
     private final Object flightLock = new Object();
     private int inFlight = 0;            // 进行中的开锁任务数（>0 时不因后台释放连接）
@@ -219,19 +223,44 @@ public class DoorLockClient {
     }
 
     private void runCommand(String macAddress, String activationKey, Listener l, boolean battery) {
-        this.listener = l;
-        this.activationKeyHex = activationKey;
-        this.randomNumberHex = null;
-        this.batteryQuery = battery;
-        if (adapter == null) { error("蓝牙不可用"); return; }
-        if (!adapter.isEnabled()) { error("请先打开蓝牙"); return; }
-        beginTask();
-        progress("连接 " + macAddress);
+        if (adapter == null) { if (l != null) l.onError("蓝牙不可用"); return; }
+        if (!adapter.isEnabled()) { if (l != null) l.onError("请先打开蓝牙"); return; }
         synchronized (connectLock) {
+            // ---- 开锁优先级最高 ----
+            boolean activeUnlock = isBusy() && !batteryQuery;   // 在途开锁
+            boolean activeBattery = isBusy() && batteryQuery;   // 在途电量
+            if (battery && activeUnlock) {
+                // 开锁进行中：电量让位（绝不打断开门）
+                if (l != null) l.onError("开锁进行中，电量查询已让位");
+                return;
+            }
+            boolean preempt = !battery && activeBattery;        // 开锁抢占在途电量
+            if (isBusy()) {
+                // 结束在途命令会话（电量被抢占 / 同类命令重入）：干净重连
+                cancelCommandTimeout();
+                Listener old = this.listener;
+                endTask();
+                closeGatt();
+                if (old != null) {
+                    final Listener o = old;
+                    final boolean wasBatt = preempt;
+                    mainHandler.post(() -> { if (o != null) o.onError(wasBatt ? "电量查询已让位给开锁" : "上一命令已取消，重新开始"); });
+                }
+            }
+            // ---- 新命令会话 ----
+            this.listener = l;
+            this.activationKeyHex = activationKey;
+            this.randomNumberHex = null;
+            this.batteryQuery = battery;
+            final long seq = ++taskSeq;
+            beginTask();
+            scheduleCommandTimeout(seq);
+            progress("连接 " + macAddress);
             if (cancelled) { endTask(); return; }
             if (isReady() && macAddress.equalsIgnoreCase(currentAddress)) {
-                // 复用已预连接：跳过扫描/连接/发现，直接进入协议
+                // 复用已预连接：跳过扫描/连接/发现，直接进入协议（重开干净会话）
                 progress("复用已预连接（跳过扫描/连接）");
+                resetProtocolSession();
                 requestMtuThenStart();
                 return;
             }
@@ -497,6 +526,35 @@ public class DoorLockClient {
         sendCommand(VocProtocol.REQUEST_RANDOM_NUMBER, "REQUEST_RANDOM_NUMBER");
     }
 
+    /**
+     * 重开干净协议会话：清掉上一次命令残留（如电量查询成功后 protocolStarted 仍为 true、
+     * state 停在 2），使复用已预连接时也能发**新**的 0D 挑战。连接本身不重连（快速路径）。
+     */
+    private void resetProtocolSession() {
+        if (mtuFallback != null) mainHandler.removeCallbacks(mtuFallback);
+        mtuFallback = null;
+        protocolStarted = false;
+        state = 0;
+        randomNumberHex = null;
+        synchronized (messageBuffer) { messageBuffer.setLength(0); }
+    }
+
+    /** 单条命令总超时：到点仍未完成（如门锁对电量无响应）则报错并释放连接，防卡死。 */
+    private void scheduleCommandTimeout(final long seq) {
+        cancelCommandTimeout();
+        commandTimeout = () -> {
+            commandTimeout = null;
+            if (seq != taskSeq || !isBusy()) return;   // 已被新命令取代 / 已完成
+            error("命令超时（" + (COMMAND_TIMEOUT_MS / 1000) + "s），请重试");
+        };
+        mainHandler.postDelayed(commandTimeout, COMMAND_TIMEOUT_MS);
+    }
+
+    private void cancelCommandTimeout() {
+        if (commandTimeout != null) mainHandler.removeCallbacks(commandTimeout);
+        commandTimeout = null;
+    }
+
     // ---------------- 写入 ----------------
 
     @SuppressLint("MissingPermission")
@@ -648,6 +706,7 @@ public class DoorLockClient {
     }
 
     private void success(final String msg) {
+        cancelCommandTimeout();
         mainHandler.post(() -> {
             if (listener != null) listener.onSuccess(msg);
             endTask();
@@ -655,6 +714,7 @@ public class DoorLockClient {
     }
 
     private void error(final String msg) {
+        cancelCommandTimeout();
         mainHandler.post(() -> {
             if (listener != null) listener.onError(msg);
             endTask();
@@ -664,6 +724,7 @@ public class DoorLockClient {
 
     private void closeGatt() {
         cancelIdleClose();
+        cancelCommandTimeout();
         if (gatt != null) {
             try { gatt.disconnect(); } catch (Exception ignored) {}
             try { gatt.close(); } catch (Exception ignored) {}

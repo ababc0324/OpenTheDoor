@@ -33,6 +33,11 @@
 - **崩溃日志优化**：`CrashLogger` 头部附设备型号/Android 版本/应用版本；
   128KB 上限轮转（crash.log → crash.log.1）；外部 App 目录优先、内部回退；
   用 `getApplicationContext()` 防 Activity 泄漏。
+- **电量查询卡住影响开门**：`DoorLockClient` 单飞行状态机——电量无响应时
+  `protocolStarted` 卡住，开锁 `startProtocol` 直接返回（开门不动）。修复：
+  **开锁优先级最高**（开锁抢占在途电量→干净重连；电量绝不打断开锁）；
+  **复用已预连接时重置协议会话**（`resetProtocolSession`，电量成功后也能发新 0D）；
+  **8s 命令总超时**（`scheduleCommandTimeout`，卡死自动释放连接）。
 
 ## 1.0.1 (2026-11-03)
 
