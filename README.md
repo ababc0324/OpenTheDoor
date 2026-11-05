@@ -55,7 +55,7 @@ then unlock even in airplane mode. Pure Java, no Gradle, no third-party dependen
 
 | 方式 | 需要 | 说明 |
 | --- | --- | --- |
-| 补丁版天猫校园（推荐） | 免 root | 装补丁版 → 登录 → 门锁页**点一次开锁**，钥匙自动同步进本应用 |
+| 同步模块（天猫校园修改版） | 免 root | [sync-module](sync-module/README.md)：LSPatch 注入 → 登录 → 门锁页**点一次开锁**，钥匙自动同步进本应用 |
 | root 抓取 | 已 root | 本应用 → 「root 抓取钥匙」，再去天猫校园点一次开锁 |
 | 电脑 adb | USB 调试 | 抓 `adb logcat` 读 `activationKey`（详见 TMallKey 教程） |
 
@@ -108,6 +108,18 @@ javac -cp android-34.jar -d test\ptout test\ProtocolTest.java java\io\github\aba
 java -cp test\ptout ProtocolTest      # -> 24 passed, 0 failed
 ```
 
+## 同步模块（天猫校园修改版）
+
+仓库同时发布一个 **LSPatch / Xposed 同步模块**（`sync-module/`），与主应用配套使用：
+
+- **作用**：在天猫校园 App 自身开锁时，hook `VocLockHelperV2.unlock` 截获明文的
+  `macAddress + activationKey`，通过**广播**（前台即时）+ **本地 Socket 127.0.0.1:42742**
+  （后台拉取，绕过 Android 11+ 包可见性）同步给本应用，**免 root 自动回填凭证**。
+- **不修改/不重打包**天猫校园 App，不在运行时上传任何数据；只在本机同步开锁参数。
+- 构建产物 `sync-module/build/out/doorunlock-sync-module.apk`（12.5KB，已签名）。
+
+详见 [sync-module/README.md](sync-module/README.md)（含安装、构建、免责声明）。
+
 ## 目录结构
 
 ```
@@ -133,6 +145,13 @@ app/
   build.ps1                      # 命令行构建
   make_icon.ps1                  # WPF 图标光栅化（可选）
   构建说明.md / 一站式使用说明.md
+sync-module/                     # 天猫校园修改版（LSPatch 同步模块）
+  AndroidManifest.xml            # 模块声明 + 作用域 com.tmall.campus.and
+  build_module.ps1               # 命令行构建（JDK21 + Android SDK + Xposed API）
+  src/com/example/doorunlock/sync/HookEntry.java
+  assets/xposed_init
+  res/values/arrays.xml
+  README.md                      # 模块说明 + 构建 + 免责声明
 ```
 
 ## 协议与许可
@@ -145,8 +164,11 @@ app/
 
 ## 免责声明
 
-本项目与天猫校园官方无关，仅供学习研究与本人宿舍门使用。
-**请勿用于开启他人门锁或任何未经授权的场景**，由此产生的一切后果由使用者自行承担。
+- 本项目与**天猫校园 / 阿里巴巴官方无任何隶属、背书或合作关系**；天猫校园为**其各自权利人**的商标，本项目仅作互操作说明。
+- **仅供个人学习、研究与本人宿舍门锁自用**；**请勿**用于开启他人门锁或任何未经授权的场景，**禁止**商业用途。
+- 主应用**不修改、不注入、不读取**天猫校园进程；同步模块通过 LSPatch/Xposed **在运行时注入**目标 App 行为，由此产生的一切后果（含目标 App 失效、账号风险等）**由使用者自行承担**。
+- **无任何明示或默示担保**；使用即视为同意上述条款。
+- 参考/衍生自 [lmc2007/TMallKey](https://github.com/lmc2007/TMallKey)（MIT），保留其版权与致谢。
 
 ## License
 
