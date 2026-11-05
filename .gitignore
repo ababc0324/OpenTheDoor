@@ -1,0 +1,20 @@
+# 构建产物 / 本地缓存
+app/build/
+build/
+*.jks
+*.keystore
+*.apk
+*.dex
+*.jar
+*.class
+
+# 编辑器 / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# 本地临时
+*.log
+local.properties
