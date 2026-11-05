@@ -72,6 +72,7 @@ sync-module/
 - 本模块通过 LSPatch/Xposed **在运行时注入**目标 App 行为；由此产生的一切后果（含目标 App 失效、账号风险等）**由使用者自行承担**。
 - **无任何明示或默示担保**；使用即视为同意上述条款。
 - 参考/衍生自 [lmc2007/TMallKey](https://github.com/lmc2007/TMallKey)（MIT），保留其版权声明。
+- 第三方版权声明见 [../NOTICE.md](../NOTICE.md)（TMallKey，© 2026 Muleng，MIT）。
 
 ## License
 

@@ -161,6 +161,7 @@ sync-module/                     # 天猫校园修改版（LSPatch 同步模块�
   [lmc2007/TMallKey](https://github.com/lmc2007/TMallKey) 的 `VocProtocol`。
 - 本仓库以 **MIT License** 发布（见 [LICENSE](LICENSE)）。
 - 参考/派生自 TMallKey 的部分同样遵循其 **MIT License**，特此致谢。
+- 第三方版权声明见 [NOTICE.md](NOTICE.md)（TMallKey，© 2026 Muleng，MIT）。
 
 ## 免责声明
 
