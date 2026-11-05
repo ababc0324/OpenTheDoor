@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.ababc0324.openthedoor"
-    android:versionCode="4"
-    android:versionName="1.0.1">
+    android:versionCode="5"
+    android:versionName="1.1.0">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
 
@@ -23,6 +23,9 @@
 
     <!-- 服务器获取 activationKey -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 应用内自更新（API 26+ 覆盖安装未知应用） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
@@ -51,5 +54,12 @@
                 <action android:name="io.github.ababc0324.openthedoor.ACTION_KEY" />
             </intent-filter>
         </receiver>
+
+        <!-- 自更新：为系统安装器提供 update.apk（content://，替代 FileProvider） -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="io.github.ababc0324.openthedoor.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

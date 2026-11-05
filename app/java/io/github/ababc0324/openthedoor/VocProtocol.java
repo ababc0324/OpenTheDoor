@@ -192,6 +192,22 @@ public final class VocProtocol {
         return plainHex.substring(8, 10).toLowerCase();
     }
 
+    /**
+     * 解析电量：解密后的明文 hex → 百分比（0-100）。
+     * 真机实测（参考 fktm-BleLockClient.battery）：
+     *   plain = FF | sign | len(2B) | status | content...
+     *   status = plain[8:10]；电量 = content 第 2 字节 = plain[10:12]（如 0x64=100%）。
+     *   content 实测 = "00 64 ff 00" → 0x64 = 100%。
+     */
+    public static Integer parseBattery(String plainHex) {
+        if (plainHex == null || plainHex.length() < 12) return null;
+        try {
+            return Integer.parseInt(plainHex.substring(10, 12), 16);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** 解密 ack 并判定是否为 status=00 的成功响应。 */
     public static boolean isAckOk(String ackHex, String randomNumberProtocol, String activationKey) {
         String plain = decryptResponse(ackHex, randomNumberProtocol, activationKey);

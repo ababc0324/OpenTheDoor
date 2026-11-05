@@ -26,13 +26,24 @@ then unlock even in airplane mode. Pure Java, no Gradle, no third-party dependen
 - **凭证硬件级加密** —— `activationKey` 由 Android Keystore 的 AES-256-GCM 加密后落盘，
   密钥不可导出、随卸载销毁。
 - **无第三方依赖** —— 纯 Java，仅用 Android SDK，界面全自绘（无资源库/图标库）。
-- **协议回归兜底** —— `test/ProtocolTest.java` 用 TMallKey 黄金向量验证，**24/24 通过**。
+- **协议回归兜底** —— `test/ProtocolTest.java` 用 TMallKey 黄金向量验证，**24/24 通过**；
+  另内置**设备端一键体检**（`ProtocolSelfTest`，直接跑 24 向量 + 环境检查）。
+- **应用内自更新** —— 页脚「检查更新」直连 GitHub Releases，SHA-256 校验 + 同签名覆盖安装。
+- **凭证加密备份** —— 用户口令 AES/GCM 导出/导入，换机/重装不丢钥匙。
 
-## 界面
+## 界面与特色
 
-深色科技风：顶部大标题 + 状态角标（**● 已预连接 / ◌ 预连接中 / ○ 未连接**）、
-圆形渐变开锁按钮（中央自绘挂锁，开锁成功后上抬）、凭证 / 同步 / 运行日志区块、
-页脚版本 + 协议归属 + 源码链接。
+**「我的门 · 健康看板」** —— 深色科技风，首页一屏读懂你的门：
+
+- **门名**（点击可改名，默认「我的门」）+ 状态角标（**● 已预连接 / ◌ 预连接中 / ○ 未连接**）
+  + 「已守护 N 次」。
+- **门锁状态看板**：电量%（可一键查询）/ 信号 RSSI / 最近开门 / 协议自检结果 / 本机凭证数；
+  电量 < 20% 红字提醒。
+- **圆形渐变开锁按钮**：中央**自绘门**，开锁成功时**门扇向内打开 + 绿色对勾 + 触觉脉冲**，
+  提示「已开门 · 欢迎回来」。
+- **开锁历史**（纯本地，无遥测）：最近 6 条（时间 + 门名 + MAC）。
+- **凭证 / 同步 / 运行日志**区块；**隐私中心**：明示数据仅存本机 + 一键清除。
+- **页脚**：版本（点击=检查更新）+ 源码链接。
 
 > 截图见 `docs/screenshots/`（可选，提交前可补充）。
 
@@ -84,7 +95,7 @@ then unlock even in airplane mode. Pure Java, no Gradle, no third-party dependen
    powershell -NoProfile -ExecutionPolicy Bypass -File app\build.ps1
    ```
 
-   产物：`app\build\out\doorunlock.apk`（v1.0.1，已签名 v1/v2/v3）。
+   产物：`app\build\out\doorunlock.apk`（v1.1.0，已签名 v1/v2/v3）。
 
 > 注意：`javac` 的通配符 `*.java` 在含空格路径会失败（脚本已用显式枚举规避）；
 > `aapt2`（native）无法 stat 中文路径，构建脚本会自动复制资源到工作区外的 ASCII 缓存
@@ -101,7 +112,21 @@ java -cp test\ptout ProtocolTest      # -> 24 passed, 0 failed
 
 ```
 app/
-  java/io/github/ababc0324/openthedoor/   # 源码（纯 Java）
+  java/io/github/ababc0324/openthedoor/   # 源码（纯 Java，零第三方依赖）
+    MainActivity.java        # 「我的门 · 健康看板」主界面
+    DoorLockClient.java      # BLE 客户端：预连接 / 开锁 / 电量 / RSSI
+    VocProtocol.java         # VOC 协议帧构建/解析（逐字节对齐 TMallKey）
+    VocCommandType.java      # 命令常量
+    AesUtils.java            # AES/hex 工具
+    CredentialStore.java     # 凭证 Keystore AES-256-GCM 存储
+    ProtocolSelfTest.java    # 设备端协议自检（24 向量 + 环境检查）
+    DoorHistory.java         # 开锁历史（本地 JSON，无遥测）
+    CredentialBackup.java    # 凭证加密备份（PBKDF2 + AES/GCM）
+    UpdateManager.java       # 应用内自更新（GitHub Releases）
+    ApkProvider.java         # content:// 安装源
+    DoorGlyphView.java       # 自绘「门」+ 开门动画
+    AmbientBackgroundView.java
+    KeySyncHelper.java / KeySyncReceiver.java   # 补丁版钥匙同步
   res/                           # 资源（自适应/legacy 图标）
   test/ProtocolTest.java         # 协议黄金向量回归
   AndroidManifest.xml

@@ -96,6 +96,8 @@ public class DoorLockClient {
     private volatile String currentAddress = null;
     private volatile String connectTarget = null;
     private volatile boolean foreground = false;
+    private volatile boolean batteryQuery = false;        // 当前任务是电量查询（否则开锁）
+    private volatile int lastRssi = Integer.MIN_VALUE;     // 最近信号强度 dBm（MIN_VALUE=未知）
 
     private final Object flightLock = new Object();
     private int inFlight = 0;            // 进行中的开锁任务数（>0 时不因后台释放连接）
@@ -124,6 +126,10 @@ public class DoorLockClient {
 
     /** 当前已就绪连接的目标地址（null = 未连接）。 */
     public String getReadyAddress() { return isReady() ? currentAddress : null; }
+
+    /** 最近一次读到的信号强度（dBm）；Integer.MIN_VALUE = 未知。 */
+    public int getLastRssi() { return lastRssi; }
+    public boolean hasRssi() { return lastRssi != Integer.MIN_VALUE; }
 
     public void setConnectionListener(ConnectionListener l) { this.connListener = l; }
 
@@ -201,12 +207,22 @@ public class DoorLockClient {
         });
     }
 
-    // ==================== 开锁入口 ====================
+    // ==================== 命令入口（开锁 / 电量） ====================
 
     public void unlock(String macAddress, String activationKey, Listener l) {
+        runCommand(macAddress, activationKey, l, false);
+    }
+
+    /** 电量查询：与开锁同流程（0D→13→命令），链路建立后发 0x01 并解析电量。 */
+    public void queryBattery(String macAddress, String activationKey, Listener l) {
+        runCommand(macAddress, activationKey, l, true);
+    }
+
+    private void runCommand(String macAddress, String activationKey, Listener l, boolean battery) {
         this.listener = l;
         this.activationKeyHex = activationKey;
         this.randomNumberHex = null;
+        this.batteryQuery = battery;
         if (adapter == null) { error("蓝牙不可用"); return; }
         if (!adapter.isEnabled()) { error("请先打开蓝牙"); return; }
         beginTask();
@@ -268,6 +284,8 @@ public class DoorLockClient {
                 try { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH); }
                 catch (Throwable ignored) { }
                 g.discoverServices();
+                // 读取信号强度（供状态看板）
+                try { g.readRemoteRssi(); } catch (Throwable ignored) { }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 boolean wasReady = isReady();
                 connected = false;
@@ -377,6 +395,14 @@ public class DoorLockClient {
             int expected = expectedFrameLength(buf);
             if (expected > 0 && buf.length() >= expected) {
                 processResponse(buf.substring(0, expected));
+            }
+        }
+
+        @Override
+        public void onReadRemoteRssi(BluetoothGatt g, int rssi, int status) {
+            if (cancelled) return;
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                lastRssi = rssi;
             }
         }
 
@@ -578,19 +604,32 @@ public class DoorLockClient {
                 error("建立加密链路失败: " + VocProtocol.describeAck(frame, randomNumberHex, activationKeyHex));
                 return;
             }
-            progress("加密链路已建立，发送 UNLOCK ...");
-            String unlockFrame = VocProtocol.buildUnlockFrame(randomNumberHex, activationKeyHex);
-            if (unlockFrame == null) { error("UNLOCK 帧构建失败"); return; }
+            progress(batteryQuery ? "加密链路已建立，发送电量查询 ..." : "加密链路已建立，发送 UNLOCK ...");
+            String cmd = batteryQuery
+                    ? VocProtocol.buildBatteryFrame(randomNumberHex, activationKeyHex)
+                    : VocProtocol.buildUnlockFrame(randomNumberHex, activationKeyHex);
+            if (cmd == null) { error(batteryQuery ? "电量帧构建失败" : "UNLOCK 帧构建失败"); return; }
             synchronized (messageBuffer) { messageBuffer.setLength(0); }
             state = 2;
-            sendCommand(unlockFrame, "UNLOCK");
+            sendCommand(cmd, batteryQuery ? "BATTERY" : "UNLOCK");
             return;
         }
         if (state == 2) {
-            if (VocProtocol.isUnlockSuccess(frame, randomNumberHex, activationKeyHex)) {
-                success("开锁成功！");
+            if (batteryQuery) {
+                String plain = VocProtocol.decryptResponse(frame, randomNumberHex, activationKeyHex);
+                if (plain == null) {
+                    error("电量查询失败: " + VocProtocol.describeAck(frame, randomNumberHex, activationKeyHex));
+                    return;
+                }
+                Integer pct = VocProtocol.parseBattery(plain);
+                if (pct == null) { error("电量解析失败: " + plain); return; }
+                success("电量 " + pct + "%");
             } else {
-                error("开锁失败: " + VocProtocol.describeAck(frame, randomNumberHex, activationKeyHex));
+                if (VocProtocol.isUnlockSuccess(frame, randomNumberHex, activationKeyHex)) {
+                    success("开锁成功！");
+                } else {
+                    error("开锁失败: " + VocProtocol.describeAck(frame, randomNumberHex, activationKeyHex));
+                }
             }
             return;
         }
@@ -631,6 +670,7 @@ public class DoorLockClient {
         currentAddress = null;
         connectTarget = null;
         protocolStarted = false;
+        lastRssi = Integer.MIN_VALUE;
         notifyConn();
     }
 }
