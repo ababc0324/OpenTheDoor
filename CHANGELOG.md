@@ -25,6 +25,14 @@
 - **看板启动崩溃修复**：`dashCell` 原返回「已加进 cell 的值 TextView」，`buildDashboard`
   又把它 `row.addView` → `IllegalStateException: child already has a parent`（onCreate 即崩）。
   改为返回 cell（值 TextView 经出参带出），启动不再闪退。
+- **一键体检闪退修复**：`onSelfTestClick` 在后台线程打印 24 向量触发 `log()`，
+  非主线程触碰视图 → `CalledFromWrongThreadException`。`log()` 改为**线程安全**
+  （非主线程自动 `runOnUiThread` 切回）。
+- **手动凭证持久化**：`startUnlock` / `onBatteryClick` 现会 `store.save(mac, key)`，
+  手动/解密填入的 MAC + activationKey 重启后由 `prefillFromStore` 回填。
+- **崩溃日志优化**：`CrashLogger` 头部附设备型号/Android 版本/应用版本；
+  128KB 上限轮转（crash.log → crash.log.1）；外部 App 目录优先、内部回退；
+  用 `getApplicationContext()` 防 Activity 泄漏。
 
 ## 1.0.1 (2026-11-03)
 

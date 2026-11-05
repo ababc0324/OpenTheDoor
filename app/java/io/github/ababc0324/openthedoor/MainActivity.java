@@ -15,6 +15,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Looper;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -663,6 +664,7 @@ public class MainActivity extends Activity {
         if (!mac.matches("(?i)^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")) { toast("MAC 地址格式错误"); return; }
         String key = AesUtils.normalizeActivationKey(etActKey.getText().toString().trim());
         if (key == null) { toast("请先填写 activationKey"); return; }
+        store.save(mac, key);            // 持久化手动/解密凭证（重启后回填）
         running = true;
         heroHint("查询电量中…");
         log("查询门锁电量 ...");
@@ -904,6 +906,7 @@ public class MainActivity extends Activity {
     }
 
     private void startUnlock(String mac, String activationKey) {
+        store.save(mac, activationKey);   // 持久化手动/解密凭证（重启后 prefillFromStore 回填）
         running = true;
         heroBtn.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
         heroHint("开锁中…");
@@ -1179,8 +1182,13 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void log(String msg) {
+    private void log(final String msg) {
         if (tvLog == null) return;
+        // 后台线程（如一键体检的 24 向量打印）不得直接触碰视图：切回主线程
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            runOnUiThread(() -> log(msg));
+            return;
+        }
         String line = "[" + android.text.format.DateFormat.format("HH:mm:ss", System.currentTimeMillis()) + "] " + msg + "\n";
         String cur = tvLog.getText().toString();
         if (cur.length() > 16000) {
