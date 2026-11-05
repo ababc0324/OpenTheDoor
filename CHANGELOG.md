@@ -22,6 +22,9 @@
   换成自定义 `PassCallback`；更新检查/安装回调加 `isFinishing/isDestroyed` 守卫
   （防 `BadTokenException`）；全部 GATT 调用包 `try-catch`（防蓝牙权限拒绝
   `SecurityException`）；新增 `CrashLogger`（未捕获异常写 `crash.log`，无 logcat 可定位）。
+- **看板启动崩溃修复**：`dashCell` 原返回「已加进 cell 的值 TextView」，`buildDashboard`
+  又把它 `row.addView` → `IllegalStateException: child already has a parent`（onCreate 即崩）。
+  改为返回 cell（值 TextView 经出参带出），启动不再闪退。
 
 ## 1.0.1 (2026-11-03)
 

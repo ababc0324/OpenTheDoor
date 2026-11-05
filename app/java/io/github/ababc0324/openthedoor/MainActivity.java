@@ -293,10 +293,14 @@ public class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        dashBattery = dashCell("电量", "—");
-        dashRssi = dashCell("信号", "—");
-        row.addView(dashBattery, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        row.addView(dashRssi, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView[] batRef = new TextView[1];
+        LinearLayout batCell = dashCell("电量", "—", batRef);
+        dashBattery = batRef[0];
+        TextView[] rssiRef = new TextView[1];
+        LinearLayout rssiCell = dashCell("信号", "—", rssiRef);
+        dashRssi = rssiRef[0];
+        row.addView(batCell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        row.addView(rssiCell, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(row);
 
         // 最近开门
@@ -345,7 +349,7 @@ public class MainActivity extends Activity {
         panel.addView(divider());
     }
 
-    private TextView dashCell(String name, String value) {
+    private LinearLayout dashCell(String name, String value, TextView[] outValue) {
         LinearLayout cell = new LinearLayout(this);
         cell.setOrientation(LinearLayout.VERTICAL);
         cell.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -362,7 +366,8 @@ public class MainActivity extends Activity {
         v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setGravity(Gravity.CENTER);
         cell.addView(v);
-        return v;
+        if (outValue != null) outValue[0] = v;
+        return cell;
     }
 
     private LinearLayout dashRow() {
