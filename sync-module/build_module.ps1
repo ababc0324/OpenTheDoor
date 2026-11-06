@@ -105,6 +105,9 @@ $aligned = Join-Path $outDir "module.aligned.apk"
 if ($LASTEXITCODE -ne 0) { throw "zipalign failed" }
 
 $keystore = Join-Path $modDir "build\syncmodule.jks"
+# Keystore password stays out of source control: read it from the environment.
+$ksPass = $env:DOORUNLOCK_KEYSTORE_PASS
+if (-not $ksPass) { throw "DOORUNLOCK_KEYSTORE_PASS is not set (keystore password required)." }
 if (-not (Test-Path $keystore)) {
     & $keytool -genkeypair -v -keystore $keystore -storepass $ksPass -keypass $ksPass `
         -alias syncmodule -keyalg RSA -keysize 2048 -validity 3650 `
