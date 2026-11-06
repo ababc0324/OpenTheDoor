@@ -23,3 +23,6 @@ Thumbs.db
 # 本地临时
 *.log
 local.properties
+
+# 内部文档（含本机路径 / 签名口令，不入库）
+上传指南.md
