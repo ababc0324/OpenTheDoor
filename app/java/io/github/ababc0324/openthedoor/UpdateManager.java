@@ -36,6 +36,11 @@ public final class UpdateManager {
         void onError(String message);
     }
 
+    /** 下载进度回调（后台线程调用；total<=0 表示未知总长）。 */
+    public interface ProgressCallback {
+        void onProgress(long done, long total);
+    }
+
     public static final String REPO = "ababc0324/OpenTheDoor";
     private static final String API = "https://api.github.com/repos/" + REPO + "/releases/latest";
     private static final String APK_NAME = "doorunlock.apk";
@@ -90,6 +95,11 @@ public final class UpdateManager {
 
     /** 下载 APK 到 cache 并校验 sha256；失败抛异常。 */
     public static File download(Context ctx, String url, String sha256) throws Exception {
+        return download(ctx, url, sha256, null);
+    }
+
+    /** 下载 APK 到 cache 并校验 sha256；带进度回调。失败抛异常。 */
+    public static File download(Context ctx, String url, String sha256, ProgressCallback prog) throws Exception {
         File out = new File(ctx.getCacheDir(), "update.apk");
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setConnectTimeout(15000);
@@ -97,12 +107,18 @@ public final class UpdateManager {
         conn.setRequestProperty("User-Agent", "OpenTheDoor");
         int code = conn.getResponseCode();
         if (code != 200) throw new IllegalStateException("下载失败 HTTP " + code);
+        long total = conn.getContentLength();
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         try (InputStream in = conn.getInputStream();
              FileOutputStream fos = new FileOutputStream(out)) {
             byte[] buf = new byte[8192];
+            long done = 0;
             int n;
-            while ((n = in.read(buf)) > 0) { fos.write(buf, 0, n); md.update(buf, 0, n); }
+            while ((n = in.read(buf)) > 0) {
+                fos.write(buf, 0, n); md.update(buf, 0, n);
+                done += n;
+                if (prog != null) prog.onProgress(done, total);
+            }
         }
         if (sha256 != null && sha256.length() >= 64) {
             String actual = hex(md.digest());

@@ -27,6 +27,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -596,9 +597,13 @@ public class MainActivity extends Activity {
         footer.setGravity(Gravity.CENTER_HORIZONTAL);
         String version = UpdateManager.currentVersion(this);
         TextView ver = tv("Open the door  v" + version + "   ·   检查更新");
-        ver.setTextColor(C_MUTED);
-        ver.setTextSize(12.5f);
+        ver.setTextColor(C_ACCENT);
+        ver.setTextSize(13);
+        ver.setTypeface(Typeface.DEFAULT_BOLD);
         ver.setGravity(Gravity.CENTER);
+        ver.setPadding(dp(18), dp(9), dp(18), dp(9));
+        ver.setBackground(ripple(rounded(0x0D22D3EE, C_BORDER, dp(12))));
+        ver.setHapticFeedbackEnabled(true);
         ver.setOnClickListener(v -> onCheckUpdateClick());
         footer.addView(ver);
         TextView gh = tv("github.com/ababc0324/OpenTheDoor");
@@ -764,23 +769,114 @@ public class MainActivity extends Activity {
 
     private void showUpdateDialog(String version, String changelog, String url, String sha) {
         if (!alive()) return;   // 更新检查回调时 Activity 可能已销毁（防 BadTokenException）
-        String body = "发现新版本 v" + version + "\n\n" + (changelog == null ? "" : changelog) + "\n\n下载后同签名覆盖安装。";
-        new AlertDialog.Builder(this)
-                .setTitle("发现新版本")
-                .setMessage(body)
-                .setPositiveButton("下载并更新", (d, w) -> downloadAndInstall(url, sha))
-                .setNegativeButton("以后再说", null)
-                .show();
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(14), dp(22), dp(10));
+        box.setBackground(rounded(C_FIELD_BG, C_BORDER, dp(18)));
+
+        // 标题
+        TextView title = tv("发现新版本");
+        title.setTextColor(C_ACCENT);
+        title.setTextSize(19);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        box.addView(title);
+
+        // 当前 -> 新版 对比
+        TextView verRow = tv("当前 v" + UpdateManager.currentVersion(this) + "  →  v" + version);
+        verRow.setTextColor(C_TEXT);
+        verRow.setTextSize(15);
+        verRow.setTypeface(Typeface.DEFAULT_BOLD);
+        verRow.setPadding(0, dp(6), 0, 0);
+        box.addView(verRow);
+
+        // 更新内容（可滚动）
+        String notes = changelog == null || changelog.isEmpty() ? "已修复若干问题，建议更新。" : changelog;
+        TextView body = tv(notes);
+        body.setTextColor(C_MUTED);
+        body.setTextSize(13);
+        body.setLineSpacing(dp(2), 1f);
+        body.setPadding(0, dp(6), 0, dp(4));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(body, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(170));
+        svLp.setMargins(0, dp(4), 0, dp(6));
+        box.addView(sv, svLp);
+
+        // 底部按钮
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button later = miniBtn("以后再说");
+        Button update = new Button(this);
+        update.setText("下载并更新");
+        update.setTextSize(14);
+        update.setAllCaps(false);
+        update.setTextColor(0xFF052A33);
+        update.setTypeface(Typeface.DEFAULT_BOLD);
+        GradientDrawable grad = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{C_ACCENT, C_ACCENT_DEEP});
+        grad.setCornerRadius(dp(12));
+        update.setBackground(ripple(grad));
+        update.setHapticFeedbackEnabled(true);
+        LinearLayout.LayoutParams ll = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        ll.setMargins(0, dp(6), dp(6), 0);
+        later.setLayoutParams(ll);
+        LinearLayout.LayoutParams ul = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        ul.setMargins(dp(6), dp(6), 0, 0);
+        update.setLayoutParams(ul);
+        btnRow.addView(later);
+        btnRow.addView(update);
+        box.addView(btnRow);
+
+        AlertDialog dlg = new AlertDialog.Builder(this).setView(box).create();
+        if (dlg.getWindow() != null) dlg.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        dlg.setCancelable(true);
+        dlg.show();
+        later.setOnClickListener(v -> dlg.dismiss());
+        update.setOnClickListener(v -> { dlg.dismiss(); downloadAndInstall(url, sha); });
     }
 
     private void downloadAndInstall(final String url, final String sha) {
-        heroHint("下载更新中…");
+        // 下载进度对话框（深色卡片）
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(22), dp(14), dp(22), dp(10));
+        box.setBackground(rounded(C_FIELD_BG, C_BORDER, dp(18)));
+        TextView t = tv("正在下载更新…");
+        t.setTextColor(C_TEXT);
+        t.setTextSize(15);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        box.addView(t);
+        ProgressBar pb = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        pb.setMax(100);
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(8));
+        plp.setMargins(0, dp(14), 0, dp(8));
+        box.addView(pb, plp);
+        TextView pct = tv("0%");
+        pct.setTextColor(C_MUTED);
+        pct.setTextSize(12);
+        pct.setGravity(Gravity.END);
+        box.addView(pct);
+        AlertDialog dlg = new AlertDialog.Builder(this).setView(box).create();
+        if (dlg.getWindow() != null) dlg.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        dlg.setCancelable(false);
+        dlg.show();
+
         new Thread(() -> {
             try {
                 FileHolder f = new FileHolder();
-                f.file = UpdateManager.download(this, url, sha);
+                f.file = UpdateManager.download(this, url, sha, (done, total) -> {
+                    runOnUiThread(() -> {
+                        int p = total > 0 ? (int) (done * 100 / total) : 0;
+                        pb.setProgress(Math.min(100, Math.max(0, p)));
+                        pct.setText(pctText(done, total));
+                    });
+                });
                 runOnUiThread(() -> {
                     if (!alive()) return;
+                    dlg.dismiss();
                     try {
                         UpdateManager.install(this, f.file);
                         toast("已开始安装更新");
@@ -791,9 +887,25 @@ public class MainActivity extends Activity {
                     }
                 });
             } catch (Exception e) {
-                runOnUiThread(() -> { if (alive()) { toast("下载更新失败：" + e.getMessage()); heroHint("更新失败"); } });
+                runOnUiThread(() -> {
+                    if (alive()) { dlg.dismiss(); toast("下载更新失败：" + e.getMessage()); heroHint("更新失败"); }
+                });
             }
         }).start();
+    }
+
+    /** 进度文案：百分比 + 已下/总大小（KB/MB 自适应）。 */
+    private static String pctText(long done, long total) {
+        String d = fmtSize(done);
+        if (total <= 0) return d;
+        String t = fmtSize(total);
+        return (done * 100 / total) + "%  (" + d + " / " + t + ")";
+    }
+
+    private static String fmtSize(long b) {
+        if (b < 1024) return b + " B";
+        if (b < 1024L * 1024) return String.format(java.util.Locale.US, "%.1f KB", b / 1024.0);
+        return String.format(java.util.Locale.US, "%.1f MB", b / 1024.0 / 1024.0);
     }
 
     private static final class FileHolder { java.io.File file; }
