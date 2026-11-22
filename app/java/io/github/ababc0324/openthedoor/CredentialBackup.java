@@ -46,8 +46,9 @@ public final class CredentialBackup {
         }
         byte[] salt = new byte[SALT_LEN];
         byte[] iv = new byte[IV_LEN];
-        new SecureRandom().nextBytes(salt);
-        new SecureRandom().nextBytes(iv);
+        SecureRandom sr = new SecureRandom();   // 复用，避免重复熵收集初始化
+        sr.nextBytes(salt);
+        sr.nextBytes(iv);
         Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
         c.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(deriveKey(passphrase, salt), "AES"),
                 new GCMParameterSpec(128, iv));

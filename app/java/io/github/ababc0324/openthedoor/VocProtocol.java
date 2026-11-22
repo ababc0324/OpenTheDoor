@@ -71,6 +71,30 @@ public final class VocProtocol {
 
     // ==================== 基础算法 ====================
 
+    /** 小写 hex 查找表（避免 String.format 逐字节分配）。 */
+    private static final char[] HEX = "0123456789abcdef".toCharArray();
+
+    /** 取单个 hex 字符的数值（0-15）；非法返回 0。 */
+    private static int nibble(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return 0;
+    }
+
+    /** 追加 2 位小写 hex（v 取低 8 位）。 */
+    private static void appendHex2(StringBuilder sb, int v) {
+        v &= 0xFF;
+        sb.append(HEX[(v >> 4) & 0xf]).append(HEX[v & 0xf]);
+    }
+
+    /** 追加 4 位小写 hex（v 取低 16 位）。 */
+    private static void appendHex4(StringBuilder sb, int v) {
+        v &= 0xFFFF;
+        sb.append(HEX[(v >> 12) & 0xf]).append(HEX[(v >> 8) & 0xf])
+          .append(HEX[(v >> 4) & 0xf]).append(HEX[v & 0xf]);
+    }
+
     /** BluetoothHelper.computeValidateCode — 字节和 % 256，输出 2 位小写 hex。 */
     public static String computeValidateCode(String content) {
         if (content == null || content.isEmpty()) return "00";
@@ -81,7 +105,9 @@ public final class VocProtocol {
             if (hi < 0 || lo < 0) continue;
             total += (hi << 4) | lo;
         }
-        return String.format("%02x", total & 0xFF);
+        StringBuilder sb = new StringBuilder(2);
+        appendHex2(sb, total & 0xFF);
+        return sb.toString();
     }
 
     /** BluetoothHelper.xor — content 逐字节 XOR key 的末 16 字节（循环）。 */
@@ -91,9 +117,9 @@ public final class VocProtocol {
         StringBuilder sb = new StringBuilder(content.length());
         int n = content.length() / 2;
         for (int i = 0; i < n; i++) {
-            int b = Integer.parseInt(content.substring(i * 2, i * 2 + 2), 16);
-            int k = Integer.parseInt(key.substring((i % 16) * 2, (i % 16) * 2 + 2), 16);
-            sb.append(String.format("%02x", b ^ k));
+            int b = (nibble(content.charAt(i * 2)) << 4) | nibble(content.charAt(i * 2 + 1));
+            int k = (nibble(key.charAt((i % 16) * 2)) << 4) | nibble(key.charAt((i % 16) * 2 + 1));
+            appendHex2(sb, b ^ k);
         }
         return sb.toString();
     }
@@ -114,12 +140,14 @@ public final class VocProtocol {
 
     /** FF | sign | contentLen(2B) | content | cksum → 补 '0' 对齐 32 hex。 */
     public static String assembleDistributeContent(String sign, String content) {
-        String core = "FF" + sign + String.format("%04x", content.length() / 2) + content;
-        core += computeValidateCode(PROTOCOL_HEADER + core);
+        StringBuilder core = new StringBuilder(content.length() + 16);
+        core.append("FF").append(sign);
+        appendHex4(core, content.length() / 2);
+        core.append(content);
+        core.append(computeValidateCode(PROTOCOL_HEADER + core));
         int pad = (32 - core.length() % 32) % 32;
-        StringBuilder sb = new StringBuilder(core);
-        for (int i = 0; i < pad; i++) sb.append('0');
-        return sb.toString();
+        for (int i = 0; i < pad; i++) core.append('0');
+        return core.toString();
     }
 
     // ==================== 组帧 / 解帧 ====================
@@ -138,8 +166,12 @@ public final class VocProtocol {
             if (actualKey == null) return null;
             String cipher = AesUtils.encryptHexString(assembleDistributeContent(sign, content), actualKey);
             if (cipher == null) return null;
-            String head = PROTOCOL_HEADER + String.format("%04x", cipher.length() / 2) + cipher;
-            return (head + computeValidateCode(head)).toUpperCase();
+            StringBuilder head = new StringBuilder(PROTOCOL_HEADER.length() + cipher.length() + 4);
+            head.append(PROTOCOL_HEADER);
+            appendHex4(head, cipher.length() / 2);
+            head.append(cipher);
+            String out = head.toString();
+            return (out + computeValidateCode(out)).toUpperCase();
         } catch (Exception e) {
             return null;
         }

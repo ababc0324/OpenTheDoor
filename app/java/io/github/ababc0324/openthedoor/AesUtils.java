@@ -14,6 +14,9 @@ import android.util.Base64;
  */
 public class AesUtils {
 
+    /** 小写 hex 查找表（避免 String.format 逐字节分配）。 */
+    private static final char[] HEX = "0123456789abcdef".toCharArray();
+
     /**
      * hex 字符串 -> byte[]
      */
@@ -37,7 +40,7 @@ public class AesUtils {
     public static String byteArrayToHex(byte[] bytes) {
         StringBuilder sb = new StringBuilder(bytes.length * 2);
         for (byte b : bytes) {
-            sb.append(String.format("%02x", b & 0xff));
+            sb.append(HEX[(b >> 4) & 0xf]).append(HEX[b & 0xf]);
         }
         return sb.toString();
     }

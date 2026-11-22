@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
@@ -24,6 +25,7 @@ public class DoorGlyphView extends View {
     private final Paint detailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint checkPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF tmp = new RectF();
+    private final Path checkPath = new Path();   // 复用，避免动画期每帧分配
 
     private float open = 0f;          // 0=关 1=开
     private ValueAnimator animator;
@@ -100,11 +102,11 @@ public class DoorGlyphView extends View {
             float s = doorW * 0.22f;
             checkPaint.setColor(0xFF34D399);
             checkPaint.setStrokeWidth(Math.max(2f, doorW * 0.06f));
-            android.graphics.Path p = new android.graphics.Path();
-            p.moveTo(cx - s * 0.9f, cy);
-            p.lineTo(cx - s * 0.25f, cy + s * 0.6f);
-            p.lineTo(cx + s * 0.95f, cy - s * 0.55f);
-            canvas.drawPath(p, checkPaint);
+            checkPath.reset();
+            checkPath.moveTo(cx - s * 0.9f, cy);
+            checkPath.lineTo(cx - s * 0.25f, cy + s * 0.6f);
+            checkPath.lineTo(cx + s * 0.95f, cy - s * 0.55f);
+            canvas.drawPath(checkPath, checkPaint);
         }
     }
 }

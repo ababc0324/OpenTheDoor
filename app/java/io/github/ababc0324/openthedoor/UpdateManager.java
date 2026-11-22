@@ -153,9 +153,11 @@ public final class UpdateManager {
         return new String(bos.toByteArray(), "UTF-8");
     }
 
+    private static final char[] HEX = "0123456789abcdef".toCharArray();
+
     private static String hex(byte[] b) {
-        StringBuilder sb = new StringBuilder();
-        for (byte x : b) sb.append(String.format("%02x", x & 0xff));
+        StringBuilder sb = new StringBuilder(b.length * 2);
+        for (byte x : b) sb.append(HEX[(x >> 4) & 0xf]).append(HEX[x & 0xf]);
         return sb.toString();
     }
 }

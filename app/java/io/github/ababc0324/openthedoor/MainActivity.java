@@ -38,6 +38,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Open the door —— 天猫校园 VOC 蓝牙门锁独立开锁应用。
@@ -61,6 +62,10 @@ public class MainActivity extends Activity {
     private interface PassCallback { void accept(String pass); }
 
     private static final int LOW_BATTERY = 20;
+
+    /** 预编译 MAC 校验（避免每次点击都重新编译正则）。 */
+    private static final Pattern MAC_PATTERN =
+            Pattern.compile("(?i)^[0-9a-f]{2}(:[0-9a-f]{2}){5}$");
 
     // ---------------- 深色配色 ----------------
     private static final int C_ACCENT = 0xFF22D3EE;
@@ -171,7 +176,7 @@ public class MainActivity extends Activity {
         client.setForeground(true);
         if (hasBlePermissions()) {
             String mac = etMac.getText().toString().trim();
-            if (mac.matches("(?i)^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")) {
+            if (MAC_PATTERN.matcher(mac).matches()) {
                 client.preconnect(mac);
             }
         }
@@ -649,7 +654,7 @@ public class MainActivity extends Activity {
         }
         // 门名 + 守护次数
         doorTitle.setText(doorName());
-        doorSubtitle.setText("VOC 蓝牙门锁  ·  完全离线  ·  已守护 " + history.count() + " 次  ·  点门名改名");
+        doorSubtitle.setText("VOC 蓝牙门锁  ·  完全离线  ·  已守护 " + all.size() + " 次  ·  点门名改名");
     }
 
     // ==================== 电量查询 ====================
@@ -657,7 +662,7 @@ public class MainActivity extends Activity {
     private void onBatteryClick() {
         if (running) { toast("进行中，请等待"); return; }
         String mac = etMac.getText().toString().trim();
-        if (!mac.matches("(?i)^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")) { toast("MAC 地址格式错误"); return; }
+        if (!MAC_PATTERN.matcher(mac).matches()) { toast("MAC 地址格式错误"); return; }
         String key = AesUtils.normalizeActivationKey(etActKey.getText().toString().trim());
         if (key == null) { toast("请先填写 activationKey"); return; }
         store.save(mac, key);            // 持久化手动/解密凭证（重启后回填）
@@ -892,7 +897,7 @@ public class MainActivity extends Activity {
     private void onUnlockClick() {
         if (running) { toast("进行中，请等待"); return; }
         String mac = etMac.getText().toString().trim();
-        if (!mac.matches("(?i)^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")) { toast("MAC 地址格式错误"); return; }
+        if (!MAC_PATTERN.matcher(mac).matches()) { toast("MAC 地址格式错误"); return; }
         String activationKey;
         if (cbUseDecrypt.isChecked()) {
             String base64 = etBase64Key.getText().toString().trim();
@@ -900,7 +905,7 @@ public class MainActivity extends Activity {
             if (base64.isEmpty() || secret.isEmpty()) { toast("请输入 base64 密文与 voc_lock_secret_key"); return; }
             activationKey = AesUtils.decryptActivationKey(base64, secret);
             if (activationKey == null) { log("解密失败：检查 base64 密文与 voc_lock_secret_key"); toast("解密失败"); return; }
-            log("解密得到 activationKey = " + activationKey);
+            log("解密得到 activationKey = " + maskKey(activationKey));
         } else {
             String manual = etActKey.getText().toString().trim();
             activationKey = AesUtils.normalizeActivationKey(manual);
@@ -915,7 +920,7 @@ public class MainActivity extends Activity {
         heroBtn.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
         heroHint("开锁中…");
         doorGlyph.setOpened(false, true);
-        log("开始开锁 ... activationKey=" + activationKey);
+        log("开始开锁 ... activationKey=" + maskKey(activationKey));
         client.unlock(mac, activationKey, new DoorLockClient.Listener() {
             @Override public void onProgress(String m) { log(m); }
             @Override public void onSuccess(String m) {
@@ -940,6 +945,12 @@ public class MainActivity extends Activity {
     }
 
     private void heroHint(String s) { heroHint.setText(s); }
+
+    /** 日志脱敏 activationKey（等价物理钥匙，只显头尾）。 */
+    private static String maskKey(String k) {
+        if (k == null || k.length() < 8) return "****";
+        return k.substring(0, 4) + "****" + k.substring(k.length() - 4);
+    }
 
     private void renameDoorDialog() {
         EditText e = new EditText(this);
@@ -983,7 +994,7 @@ public class MainActivity extends Activity {
                     etMac.setText(formatMac(last[0]));
                     etActKey.setText(last[1]);
                     log("同步成功，共 " + locks.size() + " 把锁：");
-                    for (String[] lk : locks) log("  MAC " + formatMac(lk[0]) + "  activationKey=" + lk[1]);
+                    for (String[] lk : locks) log("  MAC " + formatMac(lk[0]) + "  activationKey=" + maskKey(lk[1]));
                     toast("已同步 " + locks.size() + " 把锁的钥匙");
                     heroHint("已同步 " + locks.size() + " 把锁");
                     refreshDashboard();
@@ -1035,7 +1046,7 @@ public class MainActivity extends Activity {
                     etMac.setText(formatMac(last[0]));
                     etActKey.setText(last[1]);
                     log("root 抓取成功，共 " + locks.size() + " 把锁：");
-                    for (String[] lk : locks) log("  MAC " + formatMac(lk[0]) + "  activationKey=" + lk[1]);
+                    for (String[] lk : locks) log("  MAC " + formatMac(lk[0]) + "  activationKey=" + maskKey(lk[1]));
                     toast("已抓取 " + locks.size() + " 把锁的钥匙");
                     heroHint("已抓取 " + locks.size() + " 把锁");
                     refreshDashboard();
@@ -1195,13 +1206,15 @@ public class MainActivity extends Activity {
             return;
         }
         String line = "[" + android.text.format.DateFormat.format("HH:mm:ss", System.currentTimeMillis()) + "] " + msg + "\n";
-        String cur = tvLog.getText().toString();
-        if (cur.length() > 16000) {
+        // 用 append 追加（免全量 getText+setText 触发布局重排）；仅在超长时裁剪
+        tvLog.append(line);
+        if (tvLog.getText().length() > 16000) {
+            String cur = tvLog.getText().toString();
             cur = cur.substring(cur.length() - 12000);
             int nl = cur.indexOf('\n');
             if (nl >= 0) cur = cur.substring(nl + 1);
+            tvLog.setText(cur);
         }
-        tvLog.setText(cur + line);
         logScroll.post(() -> logScroll.fullScroll(View.FOCUS_DOWN));
     }
 

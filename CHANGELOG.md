@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.2.0 (2026-11-22) — 性能与安全优化
+
+**聚焦「亚秒级开锁」热路径与本地凭证 I/O 的削峰**，并提升构建脚本可移植性。
+
+### 性能
+
+- **HEX 查找表取代 `String.format` 循环**：`AesUtils.byteArrayToHex`、`VocProtocol.xor/computeValidateCode/assembleDistributeContent/build`、`UpdateManager.hex` 全部改为
+  `char[]` 查找表 + 半字节位运算，消除开锁/电量链路（BLE NOTIFY 聚合、密钥派生、帧构建/校验）上逐字节的
+  `String.format` 分配，减少 GC 抖动、加快响应。
+- **`CredentialStore` 缓存**：`SecretKey` 懒加载缓存（避免每次加解密都重载 Keystore 的 JNI/I/O），
+  `loadAll` 结果缓存（save/remove 时失效），显著降低主线程 `refreshDashboard` 的 Keystore/JSON 开销。
+- **`refreshDashboard` 去重**：复用一次 `history.loadAll()` 结果计算守护次数，去掉重复全量 JSON 解析。
+- **`log()` 用 `append`**：追加式写入日志，免每次全量 `getText+setText` 触发布局重排；仅超长时裁剪。
+- **`DoorGlyphView` 复用 Path**：开门动画期间不再每帧 `new Path()`，消除内存抖动。
+- **正则预编译**：MAC 校验 `Pattern` 静态预编译（原来每次点击开锁/查电量都重新编译）。
+- **`CredentialBackup` 复用 `SecureRandom`**：导出备份只初始化一次随机源。
+
+### 安全
+
+- **日志脱敏 `activationKey`**：等价门锁物理钥匙，运行日志仅显示头 4 位 + `****` + 尾 4 位。
+
+### 构建
+
+- **`build.ps1` 自动探测 build-tools**：优先 `android-14` 约定，否则取最高数字版本；R8/D8 jar 增加
+  `d8.jar` 回退（不再硬编码 `r8-8.2.47.jar`），提升跨环境可移植性。
+
 ## 1.1.0 (2026-11-05) — 首个公开发布
 
 **Open the door** 正式公开发布。独立开锁 App + 天猫校园修改版同步模块，全程离线，

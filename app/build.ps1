@@ -14,7 +14,18 @@ elseif ($env:ANDROID_HOME) { $sdkRoot = $env:ANDROID_HOME }
 elseif (Test-Path (Join-Path $root "android-sdk")) { $sdkRoot = Join-Path $root "android-sdk" }
 if (-not $sdkRoot) { throw "Android SDK not found. Set ANDROID_SDK_ROOT (or ANDROID_HOME) to your SDK." }
 
-$tools = Join-Path $sdkRoot "build-tools\android-14"
+# ---- resolve build-tools: prefer the android-14 convention, else highest numeric version ----
+$buildToolsRoot = Join-Path $sdkRoot "build-tools"
+$legacy = Join-Path $buildToolsRoot "android-14"
+if (Test-Path $legacy) {
+    $tools = $legacy
+} else {
+    $tools = Get-ChildItem $buildToolsRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^\d+(\.\d+)*$' } |
+        Sort-Object { [version]$_.Name } -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+}
+if (-not $tools) { throw "Android build-tools not found under $buildToolsRoot" }
 $platform = Join-Path $sdkRoot "platforms\android-34"
 
 $jdk = $null
@@ -22,7 +33,6 @@ if ($env:JAVA_HOME) { $jdk = $env:JAVA_HOME }
 elseif (Test-Path (Join-Path $root "jdk21\jdk-21.0.13.0.2+1")) { $jdk = Join-Path $root "jdk21\jdk-21.0.13.0.2+1" }
 if (-not $jdk) { throw "JDK not found. Set JAVA_HOME to a JDK 21." }
 
-if (-not (Test-Path $tools)) { throw "Android build-tools android-14 not found at $tools" }
 if (-not (Test-Path $platform)) { throw "Android platform android-34 not found at $platform" }
 if (-not (Test-Path (Join-Path $jdk "bin\javac.exe"))) { throw "javac not found under $jdk" }
 
@@ -49,6 +59,8 @@ $jar = Join-Path $jdk "bin\jar.exe"
 $aapt2 = Join-Path $tools "aapt2.exe"
 $zipalign = Join-Path $tools "zipalign.exe"
 $d8Jar = Join-Path $tools "lib\r8-8.2.47.jar"
+if (-not (Test-Path $d8Jar)) { $d8Jar = Join-Path $tools "lib\d8.jar" }
+if (-not (Test-Path $d8Jar)) { throw "r8/d8 jar not found under $tools" }
 $apksignerJar = Join-Path $tools "lib\apksigner.jar"
 
 $classesDir = Join-Path $appDir "build\classes"
@@ -65,7 +77,7 @@ Write-Host "== 1/5 javac =="
 # Enumerate source files explicitly: javac's *.java wildcard expansion fails on paths with spaces
 $sources = @(Get-ChildItem (Join-Path $appDir "java\io\github\ababc0324\openthedoor") -Filter "*.java" |
     ForEach-Object { $_.FullName })
-& $javac --release 8 -cp $androidJar -d $classesDir $sources
+& $javac --release 8 -encoding UTF-8 -cp $androidJar -d $classesDir $sources
 if ($LASTEXITCODE -ne 0) { throw "javac failed" }
 
 Write-Host "== 2/5 jar =="

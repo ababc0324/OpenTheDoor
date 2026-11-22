@@ -95,7 +95,7 @@ then unlock even in airplane mode. Pure Java, no Gradle, no third-party dependen
    powershell -NoProfile -ExecutionPolicy Bypass -File app\build.ps1
    ```
 
-   产物：`app\build\out\doorunlock.apk`（v1.1.0，已签名 v1/v2/v3）。
+   产物：`app\build\out\doorunlock.apk`（v1.2.0，已签名 v1/v2/v3）。
 
 > 注意：`javac` 的通配符 `*.java` 在含空格路径会失败（脚本已用显式枚举规避）；
 > `aapt2`（native）无法 stat 中文路径，构建脚本会自动复制资源到工作区外的 ASCII 缓存

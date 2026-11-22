@@ -14,9 +14,19 @@ $modDir = $PSScriptRoot
 if (-not $env:JAVA_HOME) { throw "JAVA_HOME not set (JDK 21+ required)" }
 if (-not $env:ANDROID_SDK_ROOT) { throw "ANDROID_SDK_ROOT not set (Android SDK required)" }
 $jdk = $env:JAVA_HOME
-$tools = Join-Path $env:ANDROID_SDK_ROOT "build-tools\android-14"
+# ---- resolve build-tools: prefer the android-14 convention, else highest numeric version ----
+$buildToolsRoot = Join-Path $env:ANDROID_SDK_ROOT "build-tools"
+$legacy = Join-Path $buildToolsRoot "android-14"
+if (Test-Path $legacy) {
+    $tools = $legacy
+} else {
+    $tools = Get-ChildItem $buildToolsRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^\d+(\.\d+)*$' } |
+        Sort-Object { [version]$_.Name } -Descending |
+        Select-Object -First 1 -ExpandProperty FullName
+}
+if (-not $tools) { throw "Android build-tools not found under $buildToolsRoot" }
 $platform = Join-Path $env:ANDROID_SDK_ROOT "platforms\android-34"
-if (-not (Test-Path $tools)) { throw "build-tools;android-14 not found under $env:ANDROID_SDK_ROOT" }
 if (-not (Test-Path $platform)) { throw "platforms;android-34 not found under $env:ANDROID_SDK_ROOT" }
 
 $androidJar = Join-Path $platform "android.jar"
@@ -41,6 +51,8 @@ $jar = Join-Path $jdk "bin\jar.exe"
 $aapt2 = Join-Path $tools "aapt2.exe"
 $zipalign = Join-Path $tools "zipalign.exe"
 $d8Jar = Join-Path $tools "lib\r8-8.2.47.jar"
+if (-not (Test-Path $d8Jar)) { $d8Jar = Join-Path $tools "lib\d8.jar" }
+if (-not (Test-Path $d8Jar)) { throw "r8/d8 jar not found under $tools" }
 $apksignerJar = Join-Path $tools "lib\apksigner.jar"
 
 $classesDir = Join-Path $modDir "build\classes"
@@ -58,7 +70,7 @@ Write-Host "== 1/6 javac =="
 # expansion splits on spaces and fails under a path like "E:\Opencode work".
 $srcDir = Join-Path $modDir "src\com\example\doorunlock\sync"
 $sources = @(Get-ChildItem $srcDir -Filter "*.java" | ForEach-Object { $_.FullName })
-& $javac --release 8 -cp "$xposedApi;$androidJar" -d $classesDir $sources
+& $javac --release 8 -encoding UTF-8 -cp "$xposedApi;$androidJar" -d $classesDir $sources
 if ($LASTEXITCODE -ne 0) { throw "javac failed" }
 
 Write-Host "== 2/6 jar =="

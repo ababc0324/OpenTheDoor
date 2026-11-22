@@ -8,6 +8,7 @@ import android.security.keystore.KeyProperties;
 import android.util.Base64;
 
 import java.security.KeyStore;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -32,6 +33,11 @@ public class CredentialStore {
 
     private final SharedPreferences prefs;
 
+    /** 缓存的 Keystore AES 密钥（避免每次加解密都重载 KeyStore 的 JNI/I/O）。 */
+    private SecretKey cachedKey;
+    /** 缓存的解密结果（无冒号MAC -> activationKey）；save/remove 时失效。 */
+    private Map<String, String> cachedAll;
+
     public CredentialStore(Context c) {
         prefs = c.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
@@ -40,6 +46,7 @@ public class CredentialStore {
         if (mac == null || activationKey == null) return;
         String k = mac.toUpperCase().replace(":", "");
         prefs.edit().putString(PREFIX + k, encrypt(activationKey)).apply();
+        cachedAll = null;   // 失效缓存
     }
 
     public String load(String mac) {
@@ -49,8 +56,9 @@ public class CredentialStore {
         return stored == null ? null : decrypt(stored);
     }
 
-    /** 返回 无冒号MAC -> activationKey。 */
+    /** 返回 无冒号MAC -> activationKey（只读视图；调用方不得修改）。 */
     public Map<String, String> loadAll() {
+        if (cachedAll != null) return cachedAll;
         Map<String, String> out = new LinkedHashMap<>();
         for (Map.Entry<String, ?> e : prefs.getAll().entrySet()) {
             if (!e.getKey().startsWith(PREFIX)) continue;
@@ -58,12 +66,14 @@ public class CredentialStore {
             String key = decrypt(String.valueOf(e.getValue()));
             if (key != null) out.put(mac, key);
         }
-        return out;
+        cachedAll = Collections.unmodifiableMap(out);
+        return cachedAll;
     }
 
     public void remove(String mac) {
         if (mac == null) return;
         prefs.edit().remove(PREFIX + mac.toUpperCase().replace(":", "")).apply();
+        cachedAll = null;   // 失效缓存
     }
 
     // ---------------- Keystore AES-256-GCM ----------------
@@ -103,12 +113,14 @@ public class CredentialStore {
 
     private SecretKey getOrCreateKey() {
         if (Build.VERSION.SDK_INT < 23) return null;
+        if (cachedKey != null) return cachedKey;   // 复用，避免重复 Keystore JNI/I/O
         try {
             KeyStore ks = KeyStore.getInstance(KS);
             ks.load(null);
             KeyStore.Entry e = ks.getEntry(ALIAS, null);
             if (e instanceof KeyStore.SecretKeyEntry) {
-                return ((KeyStore.SecretKeyEntry) e).getSecretKey();
+                cachedKey = ((KeyStore.SecretKeyEntry) e).getSecretKey();
+                return cachedKey;
             }
             KeyGenerator kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KS);
             kg.init(new KeyGenParameterSpec.Builder(ALIAS,
@@ -117,7 +129,8 @@ public class CredentialStore {
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                     .setKeySize(256)
                     .build());
-            return kg.generateKey();
+            cachedKey = kg.generateKey();
+            return cachedKey;
         } catch (Exception e) {
             return null;
         }
